@@ -192,10 +192,8 @@ body{font-family:'Lato',sans-serif;background:var(--bg);color:var(--text);min-he
   <!-- ===== TODAY TAB ===== -->
   <div class="tab-content active" id="tab-today">
 
-    <!-- Stats -->
     <div class="stats" id="todayStats"></div>
 
-    <!-- Add form -->
     <div class="add-form">
       <input type="text" id="tTitle" placeholder="What needs to be done today?" />
       <select id="tPri">
@@ -221,7 +219,6 @@ body{font-family:'Lato',sans-serif;background:var(--bg);color:var(--text);min-he
       <button class="addbtn" onclick="addTodayTask()">+ Add task</button>
     </div>
 
-    <!-- Timer -->
     <div class="timer-strip">
       <div class="timer-name" id="timerName"><span class="timer-idle">Click ▶ Start on a task to begin your focus timer</span></div>
       <div class="timer-dig" id="timerDig">00:00</div>
@@ -229,11 +226,9 @@ body{font-family:'Lato',sans-serif;background:var(--bg);color:var(--text);min-he
       <button class="tbtn" id="tBtn2" style="display:none" onclick="timerStop()">✕ Stop</button>
     </div>
 
-    <!-- Focus -->
     <div class="sec-label">Today's focus — top tasks to tackle first</div>
     <div class="focus-list" id="focusList"></div>
 
-    <!-- Kanban -->
     <div class="sec-label" style="margin-top:1.25rem">Task board</div>
     <div class="kanban" id="kanban"></div>
 
@@ -249,7 +244,6 @@ body{font-family:'Lato',sans-serif;background:var(--bg);color:var(--text);min-he
       <button class="todaybtn" onclick="goToday()">Today</button>
     </div>
 
-    <!-- Week add form -->
     <div class="week-add-form">
       <input type="text" id="wTitle" placeholder="Add a task..." />
       <select id="wDay">
@@ -290,7 +284,6 @@ body{font-family:'Lato',sans-serif;background:var(--bg);color:var(--text);min-he
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
 const PRI = {high:0,medium:1,low:2};
 
-function todayStr(){ return new Date().toISOString().split('T')[0]; }
 function todayDayIdx(){ const d=new Date().getDay(); return d===0?-1:d-1; }
 
 function getMonday(offset){
@@ -306,13 +299,14 @@ function isCurrentWeek(offset){ return getMonday(offset).toDateString()===getMon
 
 // ---- DATA ----
 let weekOffset=0;
-let tasks=JSON.parse(localStorage.getItem('mwp2_tasks')||'null')||[
+
+// Use in-memory storage only (no localStorage — sandbox blocks it)
+let tasks = [
   {id:1,title:'Plan the week',scope:'today',day:todayDayIdx()<0?0:todayDayIdx(),pri:'high',time:'9:00 AM',status:'todo',done:false},
   {id:2,title:'Reply to emails',scope:'today',day:todayDayIdx()<0?0:todayDayIdx(),pri:'medium',time:'10:00 AM',status:'todo',done:false},
   {id:3,title:'Team check-in',scope:'week',day:1,pri:'medium',time:'11:00 AM',status:'todo',done:false},
   {id:4,title:'Finish weekly report',scope:'week',day:4,pri:'high',time:'4:00 PM',status:'todo',done:false},
 ];
-function save(){ try{localStorage.setItem('mwp2_tasks',JSON.stringify(tasks));}catch(e){} }
 
 // ---- TIMER ----
 let timerId=null, timerSecs=0, timerRunning=false, timerInterval=null;
@@ -348,34 +342,60 @@ function todayTasks(){
 }
 function sortedForToday(arr){ return [...arr].sort((a,b)=>{ if(!a.done&&b.done)return -1; if(a.done&&!b.done)return 1; return PRI[a.pri]-PRI[b.pri]; }); }
 
+// ✅ FIX: addTodayTask — clear input first, then add, then call renderAll (which includes renderWeek)
 function addTodayTask(){
-  const title=document.getElementById('tTitle').value.trim(); if(!title)return;
-  const idx=todayDayIdx()<0?0:todayDayIdx();
-  tasks.unshift({id:Date.now(),title,scope:'today',day:idx,pri:document.getElementById('tPri').value,time:document.getElementById('tTime').value,status:'todo',done:false});
-  document.getElementById('tTitle').value=''; save(); renderAll();
+  const input = document.getElementById('tTitle');
+  const title = input.value.trim();
+  if(!title) return;
+  const idx = todayDayIdx()<0 ? 0 : todayDayIdx();
+  tasks.unshift({
+    id: Date.now(),
+    title,
+    scope: 'today',
+    day: idx,
+    pri: document.getElementById('tPri').value,
+    time: document.getElementById('tTime').value,
+    status: 'todo',
+    done: false
+  });
+  input.value = '';
+  renderAll(); // ✅ renderAll now calls renderWeek internally
 }
+
 document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('tTitle').addEventListener('keydown',e=>{if(e.key==='Enter')addTodayTask();});
   document.getElementById('wTitle').addEventListener('keydown',e=>{if(e.key==='Enter')addWeekTask();});
-  // header date
   document.getElementById('todayFull').textContent=new Date().toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).toUpperCase();
 });
 
-// ---- WEEK TASKS ----
+// ✅ FIX: addWeekTask — clear input first, then add, then call renderAll
 function addWeekTask(){
-  const title=document.getElementById('wTitle').value.trim(); if(!title)return;
-  tasks.push({id:Date.now(),title,scope:'week',day:parseInt(document.getElementById('wDay').value),pri:document.getElementById('wPri').value,time:document.getElementById('wTime').value,status:'todo',done:false});
-  document.getElementById('wTitle').value=''; save(); renderAll();
+  const input = document.getElementById('wTitle');
+  const title = input.value.trim();
+  if(!title) return;
+  tasks.push({
+    id: Date.now(),
+    title,
+    scope: 'week',
+    day: parseInt(document.getElementById('wDay').value),
+    pri: document.getElementById('wPri').value,
+    time: document.getElementById('wTime').value,
+    status: 'todo',
+    done: false
+  });
+  input.value = '';
+  renderAll(); // ✅ single call updates everything, including the week grid
 }
+
 function changeWeek(d){ weekOffset+=d; renderWeek(); }
 function goToday(){ weekOffset=0; renderWeek(); }
 
 // ---- TOGGLE / DELETE ----
-function toggleDone(id){ const t=tasks.find(t=>t.id==id); if(t){t.done=!t.done; if(t.done&&t.status!=='done')t.status='done'; if(!t.done&&t.status==='done')t.status='todo'; save(); renderAll(); } }
-function setStatus(id,s){ const t=tasks.find(t=>t.id==id); if(t){t.status=s; if(s==='done')t.done=true; save(); renderAll(); } }
-function deleteTask(id){ if(!confirm('Delete this task?'))return; tasks=tasks.filter(t=>t.id!=id); if(timerId==id)timerStop(); save(); renderAll(); }
+function toggleDone(id){ const t=tasks.find(t=>t.id==id); if(t){t.done=!t.done; if(t.done&&t.status!=='done')t.status='done'; if(!t.done&&t.status==='done')t.status='todo'; renderAll(); } }
+function setStatus(id,s){ const t=tasks.find(t=>t.id==id); if(t){t.status=s; if(s==='done')t.done=true; renderAll(); } }
+function deleteTask(id){ if(!confirm('Delete this task?'))return; tasks=tasks.filter(t=>t.id!=id); if(timerId==id)timerStop(); renderAll(); }
 
-// ---- DUE BADGE ---- (for today view, just show time or "no time")
+// ---- TIME BADGE ----
 function timeBadge(t){ return t.time?`<span class="badge b-time">${t.time}</span>`:''; }
 
 // ---- RENDER TODAY STATS ----
@@ -454,14 +474,12 @@ function renderWeek(){
   const mon=dates[0],fri=dates[4];
   document.getElementById('weekRange').textContent=
     mon.toLocaleDateString('en-AU',{month:'short',day:'numeric'})+' – '+fri.toLocaleDateString('en-AU',{month:'short',day:'numeric',year:'numeric'});
-  // pre-select today in week form
   if(isCurrentWeek(weekOffset)&&todayIdx>=0) document.getElementById('wDay').value=todayIdx;
 
   const grid=document.getElementById('daysGrid'); grid.innerHTML='';
   dates.forEach((date,i)=>{
     const isToday=i===todayIdx;
     const dayTasks=tasks.filter(t=>parseInt(t.day)===i&&t.scope==='week').sort((a,b)=>{ if(!a.done&&b.done)return -1;if(a.done&&!b.done)return 1; return PRI[a.pri]-PRI[b.pri]; });
-    // also include today-scope tasks on today's column
     const extra=isToday?tasks.filter(t=>t.scope==='today'):[];
     const all=[...dayTasks,...extra].sort((a,b)=>PRI[a.pri]-PRI[b.pri]);
     const done=all.filter(t=>t.done).length;
@@ -502,8 +520,19 @@ function switchTab(name,btn){
   if(name==='week') renderWeek();
 }
 
-function renderAll(){ renderTodayStats(); renderFocus(); renderKanban(); renderTimer(); }
-renderAll(); renderWeek();
+// ✅ FIX: renderAll now ALWAYS calls renderWeek too — both views stay in sync
+function renderAll(){
+  renderTodayStats();
+  renderFocus();
+  renderKanban();
+  renderTimer();
+  renderWeek(); // ✅ keeps week view in sync on every update
+}
+
+// Initial render
+renderAll();
+// Set header date on load
+document.getElementById('todayFull').textContent=new Date().toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).toUpperCase();
 </script>
 </body>
 </html>
