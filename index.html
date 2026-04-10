@@ -292,6 +292,26 @@ h1 span{color:var(--accent)}
 .dt-del:hover{background:var(--high-bg)}
 .day-empty{text-align:center;color:var(--text3);font-size:12px;padding:1.5rem 0;font-style:italic}
 
+/* ---- SAVE AREA ---- */
+.save-area{display:flex;align-items:center;gap:10px;flex-shrink:0}
+#lastSaved{font-size:11px;color:var(--text3);white-space:nowrap;transition:color 0.3s;letter-spacing:0.01em}
+#lastSaved.just-saved{color:var(--low)}
+.save-btn{
+  display:flex;align-items:center;gap:6px;
+  padding:8px 16px;border-radius:20px;
+  border:0.5px solid var(--border2);
+  background:var(--surface);
+  color:var(--text2);
+  font-family:inherit;font-size:12px;font-weight:600;
+  cursor:pointer;letter-spacing:-0.01em;
+  transition:all 0.15s;
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+}
+.save-btn:hover{background:var(--surface-solid);color:var(--text);box-shadow:var(--shadow-sm)}
+.save-btn:active{transform:scale(0.96)}
+.save-btn.saving{color:var(--accent);border-color:rgba(0,113,227,0.3);background:var(--accent-light)}
+.save-btn.saved{color:var(--low);border-color:rgba(52,199,89,0.3);background:var(--low-bg)}
+
 /* ---- CONFIRM DIALOG ---- */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.3);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:1000;animation:fadeIn 0.15s ease}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -313,6 +333,13 @@ h1 span{color:var(--accent)}
       <div class="title-block">
         <h1>My Work <span>Planner</span></h1>
         <div class="date-sub" id="todayFull"></div>
+      </div>
+      <div class="save-area">
+        <span id="lastSaved"></span>
+        <button class="save-btn" id="saveBtn" onclick="manualSave()">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 2.5A.5.5 0 0 1 2.5 2H9l2 2v6.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-8Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><rect x="4.5" y="2" width="3" height="2.5" rx=".3" stroke="currentColor" stroke-width="1.2"/><rect x="3.5" y="7" width="5" height="3.5" rx=".5" stroke="currentColor" stroke-width="1.2"/></svg>
+          Save
+        </button>
       </div>
     </div>
     <div class="tabs">
@@ -439,20 +466,62 @@ function weekDates(offset){
 function isCurrentWeek(offset){return getMonday(offset).toDateString()===getMonday(0).toDateString();}
 
 // --- STORAGE ---
-function saveData(){try{localStorage.setItem('wplanner_tasks',JSON.stringify(tasks));}catch(e){}}
+const STORAGE_KEY='wplanner_tasks_v2';
+
 function loadData(){
-  try{
-    const s=localStorage.getItem('wplanner_tasks');
-    if(s)return JSON.parse(s);
-  }catch(e){}
+  // 1. Try localStorage
+  try{const s=localStorage.getItem(STORAGE_KEY);if(s){const p=JSON.parse(s);if(Array.isArray(p)&&p.length>0)return p;}}catch(e){}
+  // 2. Try sessionStorage
+  try{const s=sessionStorage.getItem(STORAGE_KEY);if(s){const p=JSON.parse(s);if(Array.isArray(p)&&p.length>0)return p;}}catch(e){}
+  // 3. Try URL hash
+  try{const h=window.location.hash.slice(1);if(h){const p=JSON.parse(decodeURIComponent(h));if(Array.isArray(p)&&p.length>0)return p;}}catch(e){}
+  // 4. Default sample data
   const idx=Math.max(todayDayIdx(),0);
   return[
-    {id:1,title:'Plan the week',scope:'today',day:idx,pri:'high',startTime:'9:00 AM',endTime:'9:30 AM',status:'todo',done:false},
-    {id:2,title:'Reply to emails',scope:'today',day:idx,pri:'medium',startTime:'10:00 AM',endTime:'11:00 AM',status:'todo',done:false},
-    {id:3,title:'Team check-in',scope:'week',day:1,pri:'medium',startTime:'11:00 AM',endTime:'11:30 AM',status:'todo',done:false},
-    {id:4,title:'Finish weekly report',scope:'week',day:4,pri:'high',startTime:'4:00 PM',endTime:'5:00 PM',status:'todo',done:false},
+    {id:Date.now()+1,title:'Plan the week',scope:'today',day:idx,pri:'high',startTime:'9:00 AM',endTime:'9:30 AM',status:'todo',done:false},
+    {id:Date.now()+2,title:'Reply to emails',scope:'today',day:idx,pri:'medium',startTime:'10:00 AM',endTime:'11:00 AM',status:'todo',done:false},
+    {id:Date.now()+3,title:'Team check-in',scope:'week',day:1,pri:'medium',startTime:'11:00 AM',endTime:'11:30 AM',status:'todo',done:false},
+    {id:Date.now()+4,title:'Finish weekly report',scope:'week',day:4,pri:'high',startTime:'4:00 PM',endTime:'5:00 PM',status:'todo',done:false},
   ];
 }
+
+let lastSavedTime=null;
+
+function saveData(source){
+  const json=JSON.stringify(tasks);
+  try{localStorage.setItem(STORAGE_KEY,json);}catch(e){}
+  try{sessionStorage.setItem(STORAGE_KEY,json);}catch(e){}
+  try{history.replaceState(null,'',window.location.pathname+'#'+encodeURIComponent(json));}catch(e){}
+  lastSavedTime=new Date();
+  updateSaveUI(source==='auto');
+}
+
+function manualSave(){
+
+  const btn=document.getElementById('saveBtn');
+  btn.classList.add('saving');
+  btn.querySelector('span')||btn.insertAdjacentHTML('beforeend','');
+  setTimeout(()=>{
+    saveData('manual');
+    btn.classList.remove('saving');
+    btn.classList.add('saved');
+    setTimeout(()=>btn.classList.remove('saved'),1800);
+  },200);
+}
+
+function updateSaveUI(isAuto){
+  const el=document.getElementById('lastSaved');
+  if(!el||!lastSavedTime)return;
+  const h=lastSavedTime.getHours(),m=lastSavedTime.getMinutes();
+  const ampm=h>=12?'PM':'AM',hh=h%12||12,mm=String(m).padStart(2,'0');
+  el.textContent=`${isAuto?'Auto-saved':'Saved'} at ${hh}:${mm} ${ampm}`;
+  el.classList.add('just-saved');
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>el.classList.remove('just-saved'),3000);
+}
+
+// Auto-save every 5 minutes
+setInterval(()=>saveData('auto'),5*60*1000);
 
 let weekOffset=0;
 let tasks=loadData();
@@ -631,7 +700,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('tTitle').addEventListener('keydown',e=>{if(e.key==='Enter')addTodayTask();});
   document.getElementById('wTitle').addEventListener('keydown',e=>{if(e.key==='Enter')addWeekTask();});
   document.getElementById('modalOverlay').addEventListener('click',e=>{if(e.target===document.getElementById('modalOverlay'))closeModal();});
+  window.addEventListener('beforeunload',()=>saveData());
   renderAll();
+  saveData();
 });
 </script>
 </body>
