@@ -537,12 +537,19 @@ function sortTasks(arr){ return arr.slice().sort((a,b)=>{ if(a.done!==b.done)ret
 // A task belongs to today's board if:
 //   • scope==='today' AND assignedDate === todayISO()  (created today)
 //   • scope==='today' AND not done AND assignedDate < todayISO() (carry-over — still show but flag stale)
-//   • scope==='week' AND the task's assignedDate === todayISO()
+//   • scope==='week' AND assignedDate === todayISO() (week task scheduled for today)
+//   • scope==='week' AND not done AND assignedDate < todayISO() (overdue week task — carry over)
 function todayPool(){
   const today = todayISO();
   return tasks.filter(t => {
-    if(t.scope === 'today') return true; // show all today-scoped tasks (stale ones get a warning badge)
-    if(t.scope === 'week') return t.assignedDate === today;
+    if(t.scope === 'today') {
+      // show if it's today's task, OR if it's unfinished from a past day (carry-over)
+      return t.assignedDate === today || (!t.done && t.assignedDate < today);
+    }
+    if(t.scope === 'week') {
+      // show if scheduled for today, OR unfinished from a past date
+      return t.assignedDate === today || (!t.done && t.assignedDate < today);
+    }
     return false;
   });
 }
@@ -829,8 +836,8 @@ function renderWeek(){
   $('#weekGrid').innerHTML=dates.map((date,i)=>{
     const dateStr=dateForWeekDay(weekOffset,i);
     const weekTasks=sortTasks(tasks.filter(t=>t.scope==='week'&&t.assignedDate===dateStr));
-    const todayExtra=i===todayIdx?sortTasks(tasks.filter(t=>t.scope==='today')):[];
-    const all=weekTasks.concat(todayExtra);
+    const todayScopedForDay=sortTasks(tasks.filter(t=>t.scope==='today'&&t.assignedDate===dateStr));
+    const all=weekTasks.concat(todayScopedForDay);
     return `<div class="day ${i===todayIdx?'today':''}">
       <div class="day-name">${DAYS[i]}</div>
       <div class="day-date">${fmtShort(date)} · ${all.length} task${all.length===1?'':'s'}</div>
